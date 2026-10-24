@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>CYBER DODGE 2077</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: #0a0a14;
+      color: #00ffcc;
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      overflow: hidden;
+      user-select: none;
+    }
+    #gameContainer {
+      position: relative;
+      border: 2px solid #00ffcc;
+      border-radius: 12px;
+      box-shadow: 0 0 25px rgba(0, 255, 204, 0.4);
+      background: radial-gradient(circle at center, #111428 0%, #05060d 100%);
+    }
+    canvas { display: block; border-radius: 10px; }
+    #hud {
+      position: absolute;
+      top: 15px;
+      left: 20px;
+      right: 20px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 18px;
+      font-weight: bold;
+      text-shadow: 0 0 8px #00ffcc;
+      pointer-events: none;
+    }
+    #overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(10, 10, 20, 0.85);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      border-radius: 10px;
+    }
+    h1 {
+      font-size: 42px;
+      margin-bottom: 12px;
+      color: #ff007f;
+      text-shadow: 0 0 15px #ff007f, 0 0 30px #00ffcc;
+      letter-spacing: 2px;
+    }
+    p {
+      color: #a0c4ff;
+      margin-bottom: 24px;
+      font-size: 16px;
+      text-align: center;
+      line-height: 1.5;
+    }
+    .btn {
+      padding: 12px 32px;
+      font-size: 18px;
+      font-weight: bold;
+      color: #0a0a14;
+      background: #00ffcc;
+      border: none;
+      border-radius: 30px;
+      cursor: pointer;
+      box-shadow: 0 0 20px #00ffcc;
+      transition: all 0.2s ease;
+    }
+    .btn:hover {
+      background: #ff007f;
+      color: #fff;
+      box-shadow: 0 0 25px #ff007f;
+      transform: scale(1.05);
+    }
+  </style>
+</head>
+<body>
+
+<div id="gameContainer">
+  <canvas id="gameCanvas" width="480" height="640"></canvas>
+  <div id="hud">
+    <span id="scoreText">SCORE: 0</span>
+    <span id="shieldText">SHIELD: 100%</span>
+  </div>
+  <div id="overlay">
+    <h1 id="titleText">CYBER DODGE</h1>
+    <p id="descText">Dodge plasma orbs & laser pulses.<br>Move with Arrow Keys / Mouse / Touch.</p>
+    <button class="btn" id="startBtn">PLAY NOW</button>
+  </div>
+</div>
+
+<script>
+  const canvas = document.getElementById('gameCanvas');
+  const ctx = canvas.getContext('2d');
+  const overlay = document.getElementById('overlay');
+  const startBtn = document.getElementById('startBtn');
+  const scoreText = document.getElementById('scoreText');
+  const shieldText = document.getElementById('shieldText');
+  const titleText = document.getElementById('titleText');
+
+  let state = 'start'; // 'start', 'playing', 'over'
+  let score = 0;
+  let shield = 100;
+  let player = { x: 240, y: 560, r: 16, vx: 0 };
+  let obstacles = [];
+  let stars = [];
+  let particles = [];
+  let lastTime = 0;
+  let spawnTimer = 0;
+
+  for (let i = 0; i < 60; i++) {
+    stars.push({
+      x: Math.random() * canvas.width,
+      y: Math.random() * canvas.height,
+      s: Math.random() * 2 + 0.5,
+      speed: Math.random() * 2 + 1
+    });
+  }
+
+  const keys = {};
+  window.addEventListener('keydown', e => keys[e.key] = true);
+  window.addEventListener('keyup', e => keys[e.key] = false);
+
+  canvas.addEventListener('mousemove', e => {
+    if (state !== 'playing') return;
+    const rect = canvas.getBoundingClientRect();
+    player.x = e.clientX - rect.left;
+  });
+
+  canvas.addEventListener('touchmove', e => {
+    if (state !== 'playing') return;
+    const rect = canvas.getBoundingClientRect();
+    player.x = e.touches[0].clientX - rect.left;
+    e.preventDefault();
+  }, { passive: false });
+
+  function startGame() {
+    state = 'playing';
+    score = 0;
+    shield = 100;
+    player.x = canvas.width / 2;
+    obstacles = [];
+    particles = [];
+    overlay.style.display = 'none';
+  }
+
+  function gameOver() {
+    state = 'over';
+    titleText.innerText = 'MISSION FAILED';
+    titleText.style.color = '#ff0055';
+    document.getElementById('descText').innerHTML = `Final Score: <b>${Math.floor(score)}</b>`;
+    startBtn.innerText = 'TRY AGAIN';
+    overlay.style.display = 'flex';
+  }
+
+  startBtn.addEventListener('click', startGame);
+
+  function spawnObstacle() {
+    const size = Math.random() * 24 + 14;
+    const speed = Math.random() * 2.5 + 2.5 + (score / 1500);
+    const color = Math.random() > 0.4 ? '#ff007f' : '#ffe600';
+    obstacles.push({
+      x: Math.random() * (canvas.width - size * 2) + size,
+      y: -size,
+      r: size,
+      speed: speed,
+      color: color
+    });
+  }
+
+  function addExplosion(x, y, color) {
+    for (let i = 0; i < 16; i++) {
+      particles.push({
+        x, y,
+        vx: (Math.random() - 0.5) * 8,
+        vy: (Math.random() - 0.5) * 8,
+        r: Math.random() * 3 + 1,
+        alpha: 1,
+        color
+      });
+    }
+  }
+
+  function update(dt) {
+    stars.forEach(s => {
+      s.y += s.speed;
+      if (s.y > canvas.height) { s.y = 0; s.x = Math.random() * canvas.width; }
+    });
+
+    if (state !== 'playing') return;
+
+    score += dt * 10;
+    scoreText.innerText = `SCORE: ${Math.floor(score)}`;
+    shieldText.innerText = `SHIELD: ${Math.max(0, Math.floor(shield))}%`;
+
+    if (keys['ArrowLeft'] || keys['a']) player.x -= 380 * dt;
+    if (keys['ArrowRight'] || keys['d']) player.x += 380 * dt;
+    player.x = Math.max(player.r, Math.min(canvas.width - player.r, player.x));
+
+    spawnTimer += dt;
+    if (spawnTimer > Math.max(0.28, 0.9 - score / 4000)) {
+      spawnObstacle();
+      spawnTimer = 0;
+    }
+
+    for (let i = obstacles.length - 1; i >= 0; i--) {
+      const ob = obstacles[i];
+      ob.y += ob.speed;
+
+      const dist = Math.hypot(player.x - ob.x, player.y - ob.y);
+      if (dist < player.r + ob.r) {
+        addExplosion(ob.x, ob.y, ob.color);
+        shield -= 34;
+        obstacles.splice(i, 1);
+        if (shield <= 0) {
+          addExplosion(player.x, player.y, '#00ffcc');
+          gameOver();
+        }
+        continue;
+      }
+
+      if (ob.y - ob.r > canvas.height) {
+        obstacles.splice(i, 1);
+      }
+    }
+
+    for (let i = particles.length - 1; i >= 0; i--) {
+      const p = particles[i];
+      p.x += p.vx;
+      p.y += p.vy;
+      p.alpha -= dt * 2;
+      if (p.alpha <= 0) particles.splice(i, 1);
+    }
+  }
+
+  function draw() {
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+    ctx.fillStyle = '#ffffff';
+    stars.forEach(s => {
+      ctx.globalAlpha = 0.6;
+      ctx.fillRect(s.x, s.y, s.s, s.s);
+    });
+    ctx.globalAlpha = 1.0;
+
+    particles.forEach(p => {
+      ctx.save();
+      ctx.globalAlpha = p.alpha;
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    });
+
+    obstacles.forEach(ob => {
+      ctx.save();
+      ctx.fillStyle = ob.color;
+      ctx.shadowColor = ob.color;
+      ctx.shadowBlur = 15;
+      ctx.beginPath();
+      ctx.arc(ob.x, ob.y, ob.r, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    });
+
+    if (state === 'playing') {
+      ctx.save();
+      ctx.shadowColor = '#00ffcc';
+      ctx.shadowBlur = 20;
+      ctx.fillStyle = '#00ffcc';
+
+      ctx.beginPath();
+      ctx.moveTo(player.x, player.y - 20);
+      ctx.lineTo(player.x - 18, player.y + 14);
+      ctx.lineTo(player.x, player.y + 6);
+      ctx.lineTo(player.x + 18, player.y + 14);
+      ctx.closePath();
+      ctx.fill();
+
+      // thruster
+      ctx.fillStyle = '#ff007f';
+      ctx.beginPath();
+      ctx.arc(player.x, player.y + 12, 5 + Math.random() * 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
+  function loop(time) {
+    if (!lastTime) lastTime = time;
+    const dt = Math.min((time - lastTime) / 1000, 0.1);
+    lastTime = time;
+
+    update(dt);
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  requestAnimationFrame(loop);
+</script>
+
+</body>
+</html>
